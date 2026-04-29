@@ -8,6 +8,10 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (leave empty to auto-generate)'
+        required: false
 
 permissions:
   contents: write
