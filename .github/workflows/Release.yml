@@ -56,9 +56,15 @@ jobs:
       - id: set_tag
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            tag="v$(date +%Y%m%d)-manual"
-            echo "tag=$tag" >> $GITHUB_OUTPUT
-            echo "is_release=false" >> $GITHUB_OUTPUT
+            if [[ -n "${{ inputs.tag }}" ]]; then
+              tag="${{ inputs.tag }}"
+              echo "tag=$tag" >> $GITHUB_OUTPUT
+              echo "is_release=true" >> $GITHUB_OUTPUT
+            else
+              tag="v$(date +%Y%m%d)-manual"
+              echo "tag=$tag" >> $GITHUB_OUTPUT
+              echo "is_release=false" >> $GITHUB_OUTPUT
+            fi
             exit 0
           fi
 
