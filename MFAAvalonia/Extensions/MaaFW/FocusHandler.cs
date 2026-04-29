@@ -37,6 +37,39 @@ public class FocusHandler
     private const double DialogMarkdownMaxHeight = 520;
     private const double NotificationMarkdownMaxHeight = 260;
 
+    private static bool IsStepLogText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        return text.Contains("点击", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("寻找", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("查找", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("图像", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("图片", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("按键", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("键", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("keypress", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("click", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("tap", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("image", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("screenshot", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("找图", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("模拟", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void AddFocusLog(string displayText)
+    {
+        var formatted = TaskQueueView.ConvertCustomMarkup(displayText);
+        if (IsStepLogText(formatted))
+        {
+            _viewModel.Processor.AddStepLog(formatted);
+            return;
+        }
+
+        _viewModel.AddMarkdown(formatted);
+    }
+
     private AutoInitDictionary autoInitDictionary;
     private readonly TaskQueueViewModel _viewModel;
 
@@ -219,7 +252,7 @@ public class FocusHandler
             switch (channel.ToLower())
             {
                 case "log":
-                    _viewModel.AddMarkdown(TaskQueueView.ConvertCustomMarkup(displayText));
+                    AddFocusLog(displayText);
                     break;
                 case "toast":
                     DispatcherHelper.RunOnMainThread(() =>
@@ -290,7 +323,11 @@ public class FocusHandler
                     foreach (var line in focus.Succeeded)
                     {
                         var (text, color) = ParseColorText(line);
-                        _viewModel.AddLog(HandleStringsWithVariables(text), color == null ? null : BrushHelper.ConvertToBrush(color));
+                        var handledText = HandleStringsWithVariables(text);
+                        if (color == null && IsStepLogText(handledText))
+                            _viewModel.Processor.AddStepLog(handledText);
+                        else
+                            _viewModel.AddLog(handledText, color == null ? null : BrushHelper.ConvertToBrush(color));
                     }
                 }
                 break;
@@ -301,7 +338,11 @@ public class FocusHandler
                     foreach (var line in focus.Failed)
                     {
                         var (text, color) = ParseColorText(line);
-                        _viewModel.AddLog(HandleStringsWithVariables(text), color == null ? null : BrushHelper.ConvertToBrush(color));
+                        var handledText = HandleStringsWithVariables(text);
+                        if (color == null && IsStepLogText(handledText))
+                            _viewModel.Processor.AddStepLog(handledText);
+                        else
+                            _viewModel.AddLog(handledText, color == null ? null : BrushHelper.ConvertToBrush(color));
                     }
                 }
                 break;
@@ -324,7 +365,11 @@ public class FocusHandler
                     foreach (var line in focus.Start)
                     {
                         var (text, color) = ParseColorText(line);
-                        _viewModel.AddLog(HandleStringsWithVariables(text), color == null ? null : BrushHelper.ConvertToBrush(color));
+                        var handledText = HandleStringsWithVariables(text);
+                        if (color == null && IsStepLogText(handledText))
+                            _viewModel.Processor.AddStepLog(handledText);
+                        else
+                            _viewModel.AddLog(handledText, color == null ? null : BrushHelper.ConvertToBrush(color));
                     }
                 }
                 break;

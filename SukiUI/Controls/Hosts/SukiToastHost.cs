@@ -68,6 +68,21 @@ namespace SukiUI.Controls
                 ToastLocation.TopLeft => VerticalAlignment.Top,
                 _ => throw new ArgumentOutOfRangeException()
             };
+
+            var dock = newLoc switch
+            {
+                ToastLocation.BottomRight or ToastLocation.BottomLeft => Dock.Bottom,
+                ToastLocation.TopRight or ToastLocation.TopLeft => Dock.Top,
+                _ => throw new ArgumentOutOfRangeException()
+            };
+
+            foreach (var item in Items)
+            {
+                if (item is Control control)
+                {
+                    DockPanel.SetDock(control, dock);
+                }
+            }
         }
 
         private static void OnManagerPropertyChanged(AvaloniaObject sender,
@@ -108,6 +123,16 @@ namespace SukiUI.Controls
         {
             if (MaxToasts <= 0) return;
             var toast = args.Toast;
+            if (toast is Control control)
+            {
+                var dock = Position switch
+                {
+                    ToastLocation.BottomRight or ToastLocation.BottomLeft => Dock.Bottom,
+                    ToastLocation.TopRight or ToastLocation.TopLeft => Dock.Top,
+                    _ => throw new ArgumentOutOfRangeException()
+                };
+                DockPanel.SetDock(control, dock);
+            }
             Items.Add(args.Toast);
             Manager.EnsureMaximum(MaxToasts);
             toast.AnimateShow();

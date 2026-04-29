@@ -28,6 +28,7 @@ public partial class LogItemViewModel : ViewModelBase, IDisposable
     public LogItemViewModel(string resourceKey,
         IBrush color,
         string weight = "Regular",
+        double fontSize = 12,
         bool useKey = false,
         string dateFormat = "MM'-'dd'  'HH':'mm':'ss",
         bool changeColor = true,
@@ -40,6 +41,7 @@ public partial class LogItemViewModel : ViewModelBase, IDisposable
         Time = DateTime.Now.ToString(dateFormat);
         _changeColor = changeColor;
         Weight = weight;
+        FontSize = fontSize;
         ShowTime = showTime;
         // 提取颜色值而不是存储 IBrush 引用
         _baseColor = (color as ISolidColorBrush)?.Color;
@@ -64,6 +66,7 @@ public partial class LogItemViewModel : ViewModelBase, IDisposable
     public LogItemViewModel(string resourceKey,
         IBrush color,
         string weight = "Regular",
+        double fontSize = 12,
         bool useKey = false,
         string dateFormat = "MM'-'dd'  'HH':'mm':'ss",
         bool changeColor = true,
@@ -77,6 +80,7 @@ public partial class LogItemViewModel : ViewModelBase, IDisposable
         Time = DateTime.Now.ToString(dateFormat);
         _changeColor = changeColor;
         Weight = weight;
+        FontSize = fontSize;
         ShowTime = showTime;
         // 提取颜色值而不是存储 IBrush 引用
         _baseColor = (color as ISolidColorBrush)?.Color;
@@ -106,6 +110,7 @@ public partial class LogItemViewModel : ViewModelBase, IDisposable
     public LogItemViewModel(string content,
         IBrush? color,
         string weight = "Regular",
+        double fontSize = 12,
         string dateFormat = "MM'-'dd'  'HH':'mm':'ss",
         bool showTime = true,
         bool changeColor = true)
@@ -122,6 +127,7 @@ public partial class LogItemViewModel : ViewModelBase, IDisposable
         }
         OnThemeChanged(Instances.GuiSettingsUserControlModel.BaseTheme);
         Weight = weight;
+        FontSize = fontSize;
         ShowTime = showTime;
         Content = content;
     }
@@ -170,6 +176,14 @@ public partial class LogItemViewModel : ViewModelBase, IDisposable
     {
         get => _weight;
         set => SetProperty(ref _weight, value);
+    }
+
+    private double _fontSize = 12;
+
+    public double FontSize
+    {
+        get => _fontSize;
+        set => SetProperty(ref _fontSize, value);
     }
 
     private string _resourceKey;

@@ -1541,7 +1541,7 @@
                                         <suki:IfConditionConverter x:Key="IfConditionConverter">
                                             <suki:IfConditionConverter.False>
                                                 <DataTemplate DataType="other:LogItemViewModel">
-                                                    <TextBlock FontSize="12"
+                                                    <TextBlock FontSize="{Binding FontSize}"
                                                                FontWeight="{Binding Weight}"
                                                                Foreground="{Binding Color}"
                                                                Background="{Binding BackgroundColor}"
@@ -1549,6 +1549,7 @@
                                                                IsVisible="{Binding !UseMarkdown}"
                                                                Margin="0,4.8,0,0"
                                                                TextWrapping="WrapWithOverflow"
+                                                               MaxWidth="10000"
                                                                Text="{Binding Content}"
                                                                VerticalAlignment="Stretch" />
                                                 </DataTemplate>
@@ -1556,8 +1557,9 @@
                                             <suki:IfConditionConverter.True>
                                                 <DataTemplate DataType="other:LogItemViewModel">
                                                     <mdxaml:MarkdownScrollViewer IsVisible="{Binding UseMarkdown}"
+                                                            Margin="0,4.8,0,0"
                                                             Markdown="{Binding Content}"
-                                                            Margin="0,4.8,0,0">
+                                                            MaxWidth="10000">
                                                         <mdxaml:MarkdownScrollViewer.Engine>
                                                             <extensions:MarkdownExtension />
                                                         </mdxaml:MarkdownScrollViewer.Engine>

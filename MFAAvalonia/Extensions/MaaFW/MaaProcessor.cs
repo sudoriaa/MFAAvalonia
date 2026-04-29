@@ -24,6 +24,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Bitmap = Avalonia.Media.Imaging.Bitmap;
@@ -66,8 +67,13 @@ public class MaaProcessor
     public ObservableQueue<MFATask> TaskQueue { get; } = new();
     public bool IsV3 = false;
 
-    private const int MaxLogCount = 150;
-    private const int LogCleanupBatchSize = 30;
+    private const int MaxLogCount = 1200;
+    private const int LogCleanupBatchSize = 120;
+    private const double DefaultLogFontSize = 12;
+    private const double ImportantWarningFontSize = 15;
+    private static readonly IBrush TaskStartLogBrush = BrushHelper.ConvertToBrush("#3B82F6", Brushes.DeepSkyBlue)!;
+    private static readonly IBrush StepLogBrush = BrushHelper.ConvertToBrush("#8A8A8A", Brushes.Gray)!;
+    private static readonly IBrush ImportantWarningBrush = BrushHelper.ConvertToBrush("#EAB308", Brushes.Gold)!;
     public DisposableObservableCollection<LogItemViewModel> LogItemViewModels { get; } = new();
 
     public const string INFO = "info:";
@@ -77,6 +83,132 @@ public class MaaProcessor
     public const string DEBUG = "debug:";
     public const string CRITICAL = "critical:";
     public const string SUCCESS = "success:";
+    private static readonly Regex AnsiEscapeRegex = new(@"\x1B\[[0-9;]*[a-zA-Z]", RegexOptions.Compiled);
+    private static readonly Regex OrphanAnsiFragmentRegex = new(@"\[[0-9;]{1,32}(;[0-9;]{1,32})*[a-zA-Z]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex DecorativeSeparatorRegex = new(@"^[=\-_*~]{8,}$", RegexOptions.Compiled);
+
+    private static string SanitizeLogContent(string? content)
+    {
+        if (string.IsNullOrEmpty(content))
+            return string.Empty;
+
+        try
+        {
+            content = AnsiEscapeRegex.Replace(content, string.Empty);
+            content = OrphanAnsiFragmentRegex.Replace(content, string.Empty);
+        }
+        catch
+        {
+        }
+
+        content = content.Trim();
+        return DecorativeSeparatorRegex.IsMatch(content) ? string.Empty : content;
+    }
+
+    private static string[] SanitizeLogArgs(string[]? args)
+    {
+        if (args == null || args.Length == 0)
+            return [];
+
+        return args.Select(SanitizeLogContent).ToArray();
+    }
+
+    private bool IsImportantWarningContent(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return false;
+
+        if (content.Contains("管理员权限", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("permissionrequired", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("未提权", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (content.Contains("全角", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("中文", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("目录", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("路径", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var isResolutionLog = content.Contains("分辨率", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("resolution", StringComparison.OrdinalIgnoreCase);
+        if (!isResolutionLog)
+            return false;
+
+        var isNormalResolutionLog = content.Contains("正常", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("通过", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("符合", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("支持", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("ok", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("normal", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("pass", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("success", StringComparison.OrdinalIgnoreCase);
+        if (isNormalResolutionLog)
+            return false;
+
+        return content.Contains("异常", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("失败", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("错误", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("警告", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("不支持", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("不符合", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("过低", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("过高", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("warning", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("error", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("fail", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("invalid", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("unsupported", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private LogItemViewModel CreateLogItem(string content,
+        IBrush? brush,
+        string weight,
+        double fontSize,
+        bool changeColor,
+        bool showTime,
+        IBrush? backgroundColor = null)
+    {
+        return new LogItemViewModel(content, brush, weight, fontSize, "HH':'mm':'ss", showTime, changeColor)
+        {
+            BackgroundColor = backgroundColor ?? Brushes.Transparent
+        };
+    }
+
+    public void AddTaskStartLog(string content, bool showTime = true)
+    {
+        content = SanitizeLogContent(content);
+        DispatcherHelper.PostOnMainThread(() =>
+        {
+            LogItemViewModels.Add(CreateLogItem(content, TaskStartLogBrush, "Bold", DefaultLogFontSize, false, showTime));
+            using var logScope = BeginInstanceLogScope("MonitorTaskStart", "Monitor");
+            LoggerHelper.Info($"[Record] {content}");
+            TrimExcessLogs();
+        });
+    }
+
+    public void AddStepLog(string content, bool showTime = true)
+    {
+        content = SanitizeLogContent(content);
+        DispatcherHelper.PostOnMainThread(() =>
+        {
+            LogItemViewModels.Add(CreateLogItem(content, StepLogBrush, "Regular", DefaultLogFontSize, false, showTime));
+            using var logScope = BeginInstanceLogScope("MonitorStep", "Monitor");
+            LoggerHelper.Info($"[Record] {content}");
+            TrimExcessLogs();
+        });
+    }
+
+    public void AddImportantWarningLog(string content, bool showTime = true)
+    {
+        content = SanitizeLogContent(content);
+        DispatcherHelper.PostOnMainThread(() =>
+        {
+            LogItemViewModels.Add(CreateLogItem(content, ImportantWarningBrush, "Bold", ImportantWarningFontSize, false, showTime));
+            using var logScope = BeginInstanceLogScope("MonitorImportantWarning", "Monitor");
+            LoggerHelper.Info($"[Record] {content}");
+            TrimExcessLogs();
+        });
+    }
 
     public void ClearLogs()
     {
@@ -277,9 +409,11 @@ public class MaaProcessor
         bool changeColor = true,
         bool showTime = true)
     {
+        content = SanitizeLogContent(content);
         brush ??= Brushes.Black;
 
         var backGroundBrush = Brushes.Transparent;
+        var fontSize = DefaultLogFontSize;
         const StringComparison comparison = StringComparison.Ordinal;
 
         if (content.StartsWith(TRACE, comparison))
@@ -342,13 +476,17 @@ public class MaaProcessor
             content = content.Substring(CRITICAL.Length).TrimStart();
         }
 
+        if (IsImportantWarningContent(content))
+        {
+            brush = ImportantWarningBrush;
+            weight = "Bold";
+            fontSize = ImportantWarningFontSize;
+            changeColor = false;
+        }
+
         DispatcherHelper.PostOnMainThread(() =>
         {
-            LogItemViewModels.Add(new LogItemViewModel(content, brush, weight, "HH':'mm':'ss",
-                showTime: showTime, changeColor: changeColor)
-            {
-                BackgroundColor = backGroundBrush
-            });
+            LogItemViewModels.Add(CreateLogItem(content, brush, weight, fontSize, changeColor, showTime, backGroundBrush));
             using var logScope = BeginInstanceLogScope("MonitorLog", "Monitor");
             LoggerHelper.Info($"[Record] {content}");
 
@@ -369,11 +507,32 @@ public class MaaProcessor
     public void AddLogByKey(string key, IBrush? brush = null, bool changeColor = true, bool transformKey = true, params string[] formatArgsKeys)
     {
         brush ??= Brushes.Black;
+        formatArgsKeys = SanitizeLogArgs(formatArgsKeys);
         Task.Run(() =>
         {
             DispatcherHelper.PostOnMainThread(() =>
             {
-                var log = new LogItemViewModel(key, brush, "Regular", true, "HH':'mm':'ss", changeColor: changeColor, showTime: true, transformKey: transformKey, formatArgsKeys);
+                var fontSize = DefaultLogFontSize;
+                var weight = "Regular";
+                var previewContent = key.ToLocalizationFormatted(transformKey, formatArgsKeys);
+                if (key == LangKeys.TaskStart || IsImportantWarningContent(previewContent))
+                {
+                    if (key == LangKeys.TaskStart)
+                    {
+                        brush = TaskStartLogBrush;
+                        weight = "Bold";
+                        changeColor = false;
+                    }
+                    else
+                    {
+                        brush = ImportantWarningBrush;
+                        weight = "Bold";
+                        fontSize = ImportantWarningFontSize;
+                        changeColor = false;
+                    }
+                }
+
+                var log = new LogItemViewModel(key, brush, weight, fontSize, true, "HH':'mm':'ss", changeColor: changeColor, showTime: true, transformKey: transformKey, formatArgsKeys);
                 LogItemViewModels.Add(log);
                 using var logScope = BeginInstanceLogScope("MonitorLog", "Monitor");
                 LoggerHelper.Info(log.Content);
@@ -391,11 +550,23 @@ public class MaaProcessor
     public void AddMarkdown(string key, IBrush? brush = null, bool changeColor = true, bool transformKey = true, params string[] formatArgsKeys)
     {
         brush ??= Brushes.Black;
+        formatArgsKeys = SanitizeLogArgs(formatArgsKeys);
         Task.Run(() =>
         {
             DispatcherHelper.PostOnMainThread(() =>
             {
-                var log = new LogItemViewModel(key, brush, "Regular", true, "HH':'mm':'ss", changeColor: changeColor, showTime: true, transformKey: transformKey, formatArgsKeys)
+                var fontSize = DefaultLogFontSize;
+                var weight = "Regular";
+                var previewContent = key.ToLocalizationFormatted(transformKey, formatArgsKeys);
+                if (IsImportantWarningContent(previewContent))
+                {
+                    brush = ImportantWarningBrush;
+                    weight = "Bold";
+                    fontSize = ImportantWarningFontSize;
+                    changeColor = false;
+                }
+
+                var log = new LogItemViewModel(key, brush, weight, fontSize, true, "HH':'mm':'ss", changeColor: changeColor, showTime: true, transformKey: transformKey, formatArgsKeys)
                 {
                     UseMarkdown = true
                 };
@@ -1896,7 +2067,7 @@ public class MaaProcessor
         {
             if (!CheckTargetProcessAdminPermission())
             {
-                throw new MaaException("目标进程以管理员权限运行，需要以管理员身份运行本程序");
+                throw new MaaException(LangKeys.AdminPermissionRequiredDetail.ToLocalization());
             }
         }
 
@@ -4223,6 +4394,8 @@ public class MaaProcessor
         {
             if (!AdminHelper.IsRunningAsAdministrator())
             {
+                var adminWarning = LangKeys.AdminPermissionRequiredDetail.ToLocalization();
+                AddImportantWarningLog(adminWarning);
                 LoggerHelper.Warning($"控制器需要管理员权限，但当前进程未提权：controller={controllerType}, permissionRequired=true");
                 DispatcherHelper.RunOnMainThread(() =>
                 {

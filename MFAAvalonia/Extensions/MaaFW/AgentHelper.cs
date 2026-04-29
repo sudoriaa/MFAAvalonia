@@ -662,14 +662,35 @@ public static class AgentHelper
         }
     }
 
+    private static readonly Regex AnsiEscapeRegex = new(@"\x1B\[[0-9;]*[a-zA-Z]", RegexOptions.Compiled);
+    private static readonly Regex OrphanAnsiFragmentRegex = new(@"\[[0-9;]{1,32}(;[0-9;]{1,32})*[a-zA-Z]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex DecorativeSeparatorRegex = new(@"^[=\-_*~]{8,}$", RegexOptions.Compiled);
+
+    private static string SanitizeAgentOutput(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return string.Empty;
+
+        try
+        {
+            text = AnsiEscapeRegex.Replace(text, string.Empty);
+            text = OrphanAnsiFragmentRegex.Replace(text, string.Empty);
+        }
+        catch (Exception)
+        {
+        }
+
+        text = DecodeUnicodeEscapes(text).Trim();
+        return DecorativeSeparatorRegex.IsMatch(text) ? string.Empty : text;
+    }
+
     private static void HandleOutputLine(string? line, MaaProcessor processor, string streamKind)
     {
         if (string.IsNullOrEmpty(line)) return;
 
-        var outData = line;
-        try { outData = Regex.Replace(outData, @"\x1B\[[0-9;]*[a-zA-Z]", ""); }
-        catch (Exception) { }
-        outData = DecodeUnicodeEscapes(outData);
+        var outData = SanitizeAgentOutput(line);
+        if (string.IsNullOrEmpty(outData))
+            return;
 
         DispatcherHelper.PostOnMainThread(() =>
         {
